@@ -1,5 +1,5 @@
 # Favorite-Dock
-Displays all favorites in a file system dock.
+Displays all favorites in the file system dock.
 
 [![Godot Engine 4.3](https://img.shields.io/badge/Godot_Engine-4.x-blue)](https://godotengine.org/) ![ToolHack](https://img.shields.io/badge/Tool-Addon-green) ![Copyrights License](https://img.shields.io/badge/License-MIT-blue)
 
