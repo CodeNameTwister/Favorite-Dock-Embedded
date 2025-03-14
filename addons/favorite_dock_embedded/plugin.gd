@@ -1,8 +1,16 @@
 @tool
 extends EditorPlugin
+#{
+	#"type": "plugin",
+	#"codeRepository": "https://github.com/CodeNameTwister",
+	#"description": "Favorite dock embedded addon for godot 4",
+	#"license": "https://spdx.org/licenses/MIT",
+	#"name": "Twister",
+	#"version": "1.0.0"
+#}
 var fav_tree : Tree = null
 var finish_update : bool = true
-var SHA256 : String = ""
+var _SHA256 : String = ""
 var _chk : float = 0.0
 
 const FAV_FOLDER : String = "res://.godot/editor/favorites"
@@ -19,11 +27,15 @@ func _enter_tree() -> void:
 	_update()
 
 	fsystem.filesystem_changed.connect(_def_update)
+	dock.folder_color_changed.connect(_def_update)
 
 func _exit_tree() -> void:
-	if !fav_tree:return
-	if fav_tree.draw.is_connected(_def_update):
-		fav_tree.draw.disconnect(_def_update)
+	var dock := EditorInterface.get_file_system_dock()
+	var fsystem := EditorInterface.get_resource_filesystem()
+	if fsystem.filesystem_changed.is_connected(_def_update):
+		fsystem.filesystem_changed.disconnect(_def_update)
+	if dock.folder_color_changed.is_connected(_def_update):
+		dock.folder_color_changed.disconnect(_def_update)
 
 func _def_update() -> void:
 	_update.call_deferred(true)
@@ -33,22 +45,21 @@ func _update(force : bool = false) -> void:
 	if !finish_update:return
 	finish_update = false
 	if FileAccess.file_exists(FAV_FOLDER):
-		var _SHA256 : String = FileAccess.get_sha256(FAV_FOLDER)
-		if SHA256 != _SHA256 or force == true:
-			SHA256 = _SHA256
+		var n_SHA256 : String = FileAccess.get_sha256(FAV_FOLDER)
+		if _SHA256 != n_SHA256 or force == true:
+			_SHA256 = n_SHA256
 			var root : TreeItem = fav_tree.get_root()
 			if root != null and root.get_first_child() != null:
 				_c(root.get_first_child().get_first_child())
 	finish_update = true
 
 ## Add recursive folders/files
-func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : Color = Color.LIGHT_BLUE) -> void:
+func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : Color = Color.SKY_BLUE) -> void:
 	var efs : EditorFileSystem = EditorInterface.get_resource_filesystem()
 	var fs : EditorFileSystemDirectory = efs.get_filesystem_path(path)
 	if !fs:return
 
-	var color : Color = base_color
-	if base_color != Color.LIGHT_BLUE:
+	if base_color != Color.SKY_BLUE:
 		base_color.a = max(base_color.a  - 0.15, 0.05)
 	for x : int in fs.get_subdir_count():
 		var new_path : String = fs.get_subdir(x).get_path()
@@ -59,19 +70,19 @@ func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : C
 		new_tree.set_metadata(0, new_path)
 		new_tree.set_icon(0, _get_icon(new_path))
 		new_tree.set_custom_bg_color(0, base_color)
-		#root.set_icon_modulate(0, Color.LIGHT_BLUE)
+		#root.set_icon_modulate(0, Color.SKY_BLUE)
 		var current_color : Color = base_color
 		if data.has(new_path):
-			current_color = Color.from_string(data[new_path], Color.LIGHT_BLUE)
-			if current_color != Color.LIGHT_BLUE:
+			current_color = Color.from_string(data[new_path], Color.SKY_BLUE)
+			if current_color != Color.SKY_BLUE:
 				var nw : Color = current_color.lightened(0.25)
 				nw.a = 0.85
 				new_tree.set_icon_modulate(0, current_color)
 		else:
 			var b : Color = base_color
-			b.a = 0.75
-			b = b.lightened(0.45)
+			b.a = 1.0
 			new_tree.set_icon_modulate(0, b)
+		current_color.a = min(current_color.a, 0.25)
 		_explorer(new_path, new_tree, data, current_color)
 	for x : int in fs.get_file_count():
 		var current_color : Color = base_color
@@ -82,10 +93,11 @@ func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : C
 		new_tree.set_metadata(0, new_path)
 		new_tree.set_icon(0, _get_icon(new_path))
 		if data.has(new_path):
-			current_color = Color.from_string(data[new_path], Color.LIGHT_BLUE)
-			if current_color != Color.LIGHT_BLUE:
+			current_color = Color.from_string(data[new_path], Color.SKY_BLUE)
+			if current_color != Color.SKY_BLUE:
 				current_color = current_color.lightened(0.25)
-				current_color.a = 0.25
+
+		current_color.a = min(current_color.a, 0.25)
 		new_tree.set_custom_bg_color(0, current_color)
 
 #region rescue_fav
@@ -108,11 +120,11 @@ func _c(i : TreeItem) -> void:
 	var d : String = str(i.get_metadata(0))
 	if FileAccess.file_exists(d) or DirAccess.dir_exists_absolute(d):
 		var data : Dictionary = ProjectSettings.get_setting("file_customization/folder_colors",{})
-		var color : Color = Color.LIGHT_BLUE
+		var color : Color = Color.SKY_BLUE
 		if data.has(d):
-			color = Color.from_string(data[d], Color.LIGHT_BLUE)
-			if color != Color.LIGHT_BLUE:
-				color.a = 0.25
+			color = Color.from_string(data[d], Color.SKY_BLUE)
+			#if color != Color.SKY_BLUE:
+		color.a = 0.25
 		_explorer(d, i, data, color)
 	var n : TreeItem = i.get_next()
 	if n != null:
@@ -146,6 +158,6 @@ func _physics_process(_delta: float) -> void:
 	_chk += _delta
 	if _chk < 0.35:return
 	_chk = 0.0
-	var _SHA256 : String = FileAccess.get_sha256(FAV_FOLDER)
-	if SHA256 != _SHA256:
+	var n_SHA256 : String = FileAccess.get_sha256(FAV_FOLDER)
+	if _SHA256 != n_SHA256:
 		_update(true)
