@@ -12,11 +12,12 @@ var fav_tree : Tree = null
 var finish_update : bool = true
 var _SHA256 : String = ""
 var _chk : float = 0.0
+var _col_cache : Dictionary = {}
 
 const FAV_FOLDER : String = "res://.godot/editor/favorites"
 
-func _enter_tree() -> void:
 
+func _enter_tree() -> void:
 	var dock := EditorInterface.get_file_system_dock()
 	var fsystem := EditorInterface.get_resource_filesystem()
 	_n(dock)
@@ -24,7 +25,7 @@ func _enter_tree() -> void:
 		push_error("[ERROR] Can not find favorites tree!")
 		return
 
-	_update()
+	_update.call_deferred()
 
 	fsystem.filesystem_changed.connect(_def_update)
 	dock.folder_color_changed.connect(_def_update)
@@ -36,9 +37,20 @@ func _exit_tree() -> void:
 		fsystem.filesystem_changed.disconnect(_def_update)
 	if dock.folder_color_changed.is_connected(_def_update):
 		dock.folder_color_changed.disconnect(_def_update)
+	if fav_tree.item_collapsed.is_connected(_on_collap):
+		fav_tree.item_collapsed.disconnect(_on_collap)
+	_col_cache.clear()
 
 func _def_update() -> void:
 	_update.call_deferred(true)
+
+## Tree callback
+func _on_collap(i : TreeItem) -> void:
+	var v : Variant = i.get_metadata(0)
+	if v is String:
+		if v.is_empty():return
+		if _col_cache.has(v):
+			_col_cache[v][1] = i.collapsed
 
 ## Refresh dock
 func _update(force : bool = false) -> void:
@@ -49,8 +61,15 @@ func _update(force : bool = false) -> void:
 		if _SHA256 != n_SHA256 or force == true:
 			_SHA256 = n_SHA256
 			var root : TreeItem = fav_tree.get_root()
+			if !fav_tree.item_collapsed.is_connected(_on_collap):
+				fav_tree.item_collapsed.connect(_on_collap)
 			if root != null and root.get_first_child() != null:
+				for k : Variant in _col_cache.keys():
+					_col_cache[k][0] = false
 				_c(root.get_first_child().get_first_child())
+				for x : String in _col_cache.keys():
+					if _col_cache[x][0] == false:
+						_col_cache.erase(x)
 	finish_update = true
 
 ## Add recursive folders/files
@@ -58,7 +77,6 @@ func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : C
 	var efs : EditorFileSystem = EditorInterface.get_resource_filesystem()
 	var fs : EditorFileSystemDirectory = efs.get_filesystem_path(path)
 	if !fs:return
-
 	if base_color != Color.SKY_BLUE:
 		base_color.a = max(base_color.a  - 0.15, 0.05)
 	for x : int in fs.get_subdir_count():
@@ -71,6 +89,12 @@ func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : C
 		new_tree.set_icon(0, _get_icon(new_path))
 		new_tree.set_custom_bg_color(0, base_color)
 		#root.set_icon_modulate(0, Color.SKY_BLUE)
+		if _col_cache.has(new_path):
+			new_tree.collapsed = _col_cache[new_path][1]
+		else:
+			_col_cache[new_path] = [true, true]
+			new_tree.collapsed = true
+		_col_cache[new_path][0] = true
 		var current_color : Color = base_color
 		if data.has(new_path):
 			current_color = Color.from_string(data[new_path], Color.SKY_BLUE)
@@ -126,6 +150,9 @@ func _c(i : TreeItem) -> void:
 			#if color != Color.SKY_BLUE:
 		color.a = 0.25
 		_explorer(d, i, data, color)
+		if !_col_cache.has(d):
+			_col_cache[d] = [true, true]
+		i.collapsed = _col_cache[d][1]
 	var n : TreeItem = i.get_next()
 	if n != null:
 		_c(n)
