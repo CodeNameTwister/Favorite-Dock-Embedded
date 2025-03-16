@@ -6,7 +6,7 @@ extends EditorPlugin
 	#"description": "Favorite dock embedded addon for godot 4",
 	#"license": "https://spdx.org/licenses/MIT",
 	#"name": "Twister",
-	#"version": "1.0.0"
+	#"version": "1.0.2"
 #}
 var fav_tree : Tree = null
 var finish_update : bool = true
@@ -29,16 +29,42 @@ func _enter_tree() -> void:
 
 	fsystem.filesystem_changed.connect(_def_update)
 	dock.folder_color_changed.connect(_def_update)
+	dock.files_moved.connect(_moved_callback)
+	dock.file_removed.connect(_remove_callback)
+	dock.folder_moved.connect(_moved_callback)
+	dock.folder_removed.connect(_remove_callback)
+
+	var vp : Viewport = Engine.get_main_loop().root
+	vp.focus_entered.connect(_on_wnd)
+	vp.focus_exited.connect(_out_wnd)
+
+func _on_wnd() -> void:set_physics_process(true)
+func _out_wnd() -> void:set_physics_process(false)
 
 func _exit_tree() -> void:
 	var dock := EditorInterface.get_file_system_dock()
 	var fsystem := EditorInterface.get_resource_filesystem()
+	var vp : Viewport = Engine.get_main_loop().root
 	if fsystem.filesystem_changed.is_connected(_def_update):
 		fsystem.filesystem_changed.disconnect(_def_update)
 	if dock.folder_color_changed.is_connected(_def_update):
 		dock.folder_color_changed.disconnect(_def_update)
+	if dock.files_moved.is_connected(_moved_callback):
+		dock.files_moved.disconnect(_moved_callback)
+	if dock.file_removed.is_connected(_remove_callback):
+		dock.file_removed.disconnect(_remove_callback)
+	if dock.folder_moved.is_connected(_moved_callback):
+		dock.folder_moved.disconnect(_moved_callback)
+	if dock.folder_removed.is_connected(_remove_callback):
+		dock.folder_removed.disconnect(_remove_callback)
+	if dock.folder_color_changed.is_connected(_def_update):
+		dock.folder_color_changed.disconnect(_def_update)
 	if fav_tree.item_collapsed.is_connected(_on_collap):
 		fav_tree.item_collapsed.disconnect(_on_collap)
+	if vp.focus_entered.is_connected(_on_wnd):
+		vp.focus_entered.disconnect(_on_wnd)
+	if vp.focus_exited.is_connected(_out_wnd):
+		vp.focus_exited.disconnect(_out_wnd)
 	_col_cache.clear()
 
 func _def_update() -> void:
@@ -64,13 +90,22 @@ func _update(force : bool = false) -> void:
 			if !fav_tree.item_collapsed.is_connected(_on_collap):
 				fav_tree.item_collapsed.connect(_on_collap)
 			if root != null and root.get_first_child() != null:
-				for k : Variant in _col_cache.keys():
-					_col_cache[k][0] = false
 				_c(root.get_first_child().get_first_child())
 				for x : String in _col_cache.keys():
 					if _col_cache[x][0] == false:
 						_col_cache.erase(x)
-	finish_update = true
+	set_deferred(&"finish_update", true)
+
+func _moved_callback(a : String, b : String) -> void:
+	if a != b:
+		if _col_cache.has(a):
+			_col_cache[b] = _col_cache[a]
+			_col_cache.erase(a)
+
+func _remove_callback(a : String) -> void:
+	if _col_cache.has(a):
+		_col_cache.erase(a)
+
 
 ## Add recursive folders/files
 func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : Color = Color.SKY_BLUE) -> void:
@@ -187,4 +222,8 @@ func _physics_process(_delta: float) -> void:
 	_chk = 0.0
 	var n_SHA256 : String = FileAccess.get_sha256(FAV_FOLDER)
 	if _SHA256 != n_SHA256:
+		var fs : EditorFileSystem =  EditorInterface.get_resource_filesystem()
+		if !fs or fs.is_scanning():return
+		for k : Variant in _col_cache.keys():
+			_col_cache[k][0] = false
 		_update(true)
