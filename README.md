@@ -10,6 +10,8 @@ Displays all favorites in the file system dock.
 
 # Preview
 
+Youtube: https://youtu.be/b0Bxgp0OIJo
+
 ### File System
 
 ![example](https://github.com/user-attachments/assets/16f2af78-e8ce-40f3-9f07-51404edb2172))
