@@ -136,7 +136,7 @@ func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : C
 			if current_color != Color.SKY_BLUE:
 				var nw : Color = current_color.lightened(0.25)
 				nw.a = 0.85
-				new_tree.set_icon_modulate(0, current_color)
+				new_tree.set_icon_modulate(0, nw)
 		else:
 			var b : Color = base_color
 			b.a = 1.0
