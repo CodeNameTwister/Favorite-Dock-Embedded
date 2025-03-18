@@ -6,6 +6,8 @@ Displays all favorites in the file system dock.
 
 ## Features
 * Favorite folders are displayed with all subfolders and files.
+
+## Still needs refinement
 * Replicate colors on folders/files setted.
 
 # Preview
