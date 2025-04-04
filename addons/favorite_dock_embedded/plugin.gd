@@ -1,13 +1,12 @@
 @tool
 extends EditorPlugin
-#{
-	#"type": "plugin",
-	#"codeRepository": "https://github.com/CodeNameTwister",
-	#"description": "Favorite dock embedded addon for godot 4",
-	#"license": "https://spdx.org/licenses/MIT",
-	#"name": "Twister",
-	#"version": "1.0.2"
-#}
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#	Script Spliter
+#	https://github.com/CodeNameTwister/Favorite-Dock-Embedded
+#
+#	Script Spliter addon for godot 4
+#	author:		"Twister"
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 var fav_tree : Tree = null
 var finish_update : bool = true
 var _SHA256 : String = ""
@@ -72,11 +71,42 @@ func _def_update() -> void:
 
 ## Tree callback
 func _on_collap(i : TreeItem) -> void:
+	const RES : String = "res://"
+	var parent : TreeItem = i.get_parent()
+	while null != parent:
+		if parent.get_metadata(0) == RES:
+			return
+		parent = parent.get_parent()
 	var v : Variant = i.get_metadata(0)
 	if v is String:
 		if v.is_empty():return
 		if _col_cache.has(v):
 			_col_cache[v][1] = i.collapsed
+
+##TEMP
+const DEFAULT_COLOR : Color = Color(0.608, 0.811, 0.986, 1.0)
+
+func _parse_color(color : String) -> Color:
+	match color:
+		"red":
+			return Color(1.0, 0.271, 0.271, 1.0)
+		"orange":
+			return Color(1.0, 0.561, 0.271, 1.0)
+		"yellow":
+			return Color(1.0, 0.89, 0.271, 1.0)
+		"green":
+			return Color(0.502, 1.0, 0.271, 1.0)
+		"teal":
+			return Color(0.271, 1.0, 0.635, 1.0)
+		"blue":
+			return Color(0.271, 0.843, 1.0, 1.0)
+		"purple":
+			return Color(0.502, 0.271, 1.0, 1.0)
+		"pink":
+			return Color(1.0, 0.271, 0.588, 1.0)
+		"gray":
+			return Color(0.616, 0.616, 0.616, 1.0)
+	return Color.from_string(color, DEFAULT_COLOR)
 
 ## Refresh dock
 func _update(force : bool = false) -> void:
@@ -108,22 +138,23 @@ func _remove_callback(a : String) -> void:
 
 
 ## Add recursive folders/files
-func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : Color = Color.SKY_BLUE) -> void:
+func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : Color = DEFAULT_COLOR) -> void:
 	var efs : EditorFileSystem = EditorInterface.get_resource_filesystem()
 	var fs : EditorFileSystemDirectory = efs.get_filesystem_path(path)
 	if !fs:return
-	if base_color != Color.SKY_BLUE:
-		base_color.a = max(base_color.a  - 0.15, 0.05)
+	if base_color != DEFAULT_COLOR:
+		base_color.a = 0.1
 	for x : int in fs.get_subdir_count():
 		var new_path : String = fs.get_subdir(x).get_path()
 		var new_tree : TreeItem = tree.create_child()
 		var fname : String = new_path.trim_suffix("/").get_file()
 		new_tree.set_text(0, fname)
-		#root.set_text(0, "res://")
 		new_tree.set_metadata(0, new_path)
 		new_tree.set_icon(0, _get_icon(new_path))
-		new_tree.set_custom_bg_color(0, base_color)
-		#root.set_icon_modulate(0, Color.SKY_BLUE)
+		if base_color != DEFAULT_COLOR:
+			new_tree.set_custom_bg_color(0, base_color)
+		else:
+			new_tree.set_custom_bg_color(0, Color.TRANSPARENT)
 		if _col_cache.has(new_path):
 			new_tree.collapsed = _col_cache[new_path][1]
 		else:
@@ -132,16 +163,21 @@ func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : C
 		_col_cache[new_path][0] = true
 		var current_color : Color = base_color
 		if data.has(new_path):
-			current_color = Color.from_string(data[new_path], Color.SKY_BLUE)
-			if current_color != Color.SKY_BLUE:
-				var nw : Color = current_color.lightened(0.25)
-				nw.a = 0.85
+			current_color = _parse_color(data[new_path])
+			if current_color != DEFAULT_COLOR:
+				var nw : Color = current_color
+				nw.a = 1.0
 				new_tree.set_icon_modulate(0, nw)
+				nw.a = 0.13
+				new_tree.set_custom_bg_color(0, nw)
+			else:
+				new_tree.set_icon_modulate(0, current_color)
+				new_tree.set_custom_bg_color(0, current_color)
 		else:
 			var b : Color = base_color
 			b.a = 1.0
 			new_tree.set_icon_modulate(0, b)
-		current_color.a = min(current_color.a, 0.25)
+		current_color.a = 0.1
 		_explorer(new_path, new_tree, data, current_color)
 	for x : int in fs.get_file_count():
 		var current_color : Color = base_color
@@ -152,12 +188,12 @@ func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : C
 		new_tree.set_metadata(0, new_path)
 		new_tree.set_icon(0, _get_icon(new_path))
 		if data.has(new_path):
-			current_color = Color.from_string(data[new_path], Color.SKY_BLUE)
-			if current_color != Color.SKY_BLUE:
-				current_color = current_color.lightened(0.25)
-
-		current_color.a = min(current_color.a, 0.25)
-		new_tree.set_custom_bg_color(0, current_color)
+			current_color = _parse_color(data[new_path])
+		if current_color == DEFAULT_COLOR:
+			new_tree.set_custom_bg_color(0, Color.TRANSPARENT)
+		else:
+			current_color.a = 0.1
+			new_tree.set_custom_bg_color(0, current_color)
 
 #region rescue_fav
 func _n(n : Node) -> bool:
@@ -179,15 +215,19 @@ func _c(i : TreeItem) -> void:
 	var d : String = str(i.get_metadata(0))
 	if FileAccess.file_exists(d) or DirAccess.dir_exists_absolute(d):
 		var data : Dictionary = ProjectSettings.get_setting("file_customization/folder_colors",{})
-		var color : Color = Color.SKY_BLUE
+		var color : Color = DEFAULT_COLOR
 		if data.has(d):
-			color = Color.from_string(data[d], Color.SKY_BLUE)
-			#if color != Color.SKY_BLUE:
-		color.a = 0.25
+			color = _parse_color(data[d])
+		if color != DEFAULT_COLOR:
+			color.a = 0.13
+			i.set_custom_bg_color(0, color)
+		else:
+			i.set_custom_bg_color(0, Color.TRANSPARENT)
 		_explorer(d, i, data, color)
-		if !_col_cache.has(d):
-			_col_cache[d] = [true, true]
-		i.collapsed = _col_cache[d][1]
+	if !_col_cache.has(d):
+		_col_cache[d] = [true, true]
+	_col_cache[d][0] = true
+	i.collapsed = _col_cache[d][1]
 	var n : TreeItem = i.get_next()
 	if n != null:
 		_c(n)
