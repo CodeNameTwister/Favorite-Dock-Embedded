@@ -99,6 +99,8 @@ func _update(only_colors : bool = false) -> void:
 	if !fav_tree.item_collapsed.is_connected(_on_collap):
 		fav_tree.item_collapsed.connect(_on_collap)
 	if root != null and root.get_first_child() != null:
+		for x : String in _col_cache.keys():
+			_col_cache[x][0] = false
 		_explorer(fav_tree, only_colors)
 		for x : String in _col_cache.keys():
 			if _col_cache[x][0] == false:
