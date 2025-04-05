@@ -4,17 +4,26 @@ extends EditorPlugin
 #	Script Spliter
 #	https://github.com/CodeNameTwister/Favorite-Dock-Embedded
 #
-#	Script Spliter addon for godot 4
+#	Favorite-Dock-Embedded addon for godot 4
 #	author:		"Twister"
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+const WAIT_TIME_TO_REPLICATE_COLORS : float = 1.25 # Seconds
+const REPLICATE_COLORS_TIMES : int = 0 # Times repeat to secure recplitae colors
+
 var fav_tree : Tree = null
 var finish_update : bool = true
-var _SHA256 : String = ""
-var _chk : float = 0.0
+
 var _col_cache : Dictionary = {}
 
-const FAV_FOLDER : String = "res://.godot/editor/favorites"
-
+var _current_replicate_times : int = 0
+var _require_update : bool = true:
+	set(e):
+		if e:
+			_current_replicate_times = REPLICATE_COLORS_TIMES
+		_require_update = e
+var _chk : float = 0.0
+var _hook_item : TreeItem = null
 
 func _enter_tree() -> void:
 	var dock := EditorInterface.get_file_system_dock()
@@ -67,64 +76,108 @@ func _exit_tree() -> void:
 	_col_cache.clear()
 
 func _def_update() -> void:
-	_update.call_deferred(true)
+	if !is_instance_valid(_hook_item):
+		_update.call_deferred()
+	_require_update = true
 
 ## Tree callback
 func _on_collap(i : TreeItem) -> void:
 	const RES : String = "res://"
-	var parent : TreeItem = i.get_parent()
-	while null != parent:
-		if parent.get_metadata(0) == RES:
-			return
-		parent = parent.get_parent()
 	var v : Variant = i.get_metadata(0)
 	if v is String:
 		if v.is_empty():return
 		if _col_cache.has(v):
+			var parent : TreeItem = i.get_parent()
+			while null != parent:
+				if parent.get_metadata(0) == RES:
+					return
+				parent = parent.get_parent()
 			_col_cache[v][1] = i.collapsed
 
-##TEMP
-const DEFAULT_COLOR : Color = Color(0.608, 0.811, 0.986, 1.0)
-
-func _parse_color(color : String) -> Color:
-	match color:
-		"red":
-			return Color(1.0, 0.271, 0.271, 1.0)
-		"orange":
-			return Color(1.0, 0.561, 0.271, 1.0)
-		"yellow":
-			return Color(1.0, 0.89, 0.271, 1.0)
-		"green":
-			return Color(0.502, 1.0, 0.271, 1.0)
-		"teal":
-			return Color(0.271, 1.0, 0.635, 1.0)
-		"blue":
-			return Color(0.271, 0.843, 1.0, 1.0)
-		"purple":
-			return Color(0.502, 0.271, 1.0, 1.0)
-		"pink":
-			return Color(1.0, 0.271, 0.588, 1.0)
-		"gray":
-			return Color(0.616, 0.616, 0.616, 1.0)
-	return Color.from_string(color, DEFAULT_COLOR)
-
 ## Refresh dock
-func _update(force : bool = false) -> void:
-	if !finish_update:return
-	finish_update = false
-	if FileAccess.file_exists(FAV_FOLDER):
-		var n_SHA256 : String = FileAccess.get_sha256(FAV_FOLDER)
-		if _SHA256 != n_SHA256 or force == true:
-			_SHA256 = n_SHA256
-			var root : TreeItem = fav_tree.get_root()
-			if !fav_tree.item_collapsed.is_connected(_on_collap):
-				fav_tree.item_collapsed.connect(_on_collap)
-			if root != null and root.get_first_child() != null:
-				_c(root.get_first_child().get_first_child())
-				for x : String in _col_cache.keys():
-					if _col_cache[x][0] == false:
-						_col_cache.erase(x)
-	set_deferred(&"finish_update", true)
+func _update(only_colors : bool = false) -> void:
+	var root : TreeItem = fav_tree.get_root()
+	if !fav_tree.item_collapsed.is_connected(_on_collap):
+		fav_tree.item_collapsed.connect(_on_collap)
+	if root != null and root.get_first_child() != null:
+		_explorer(fav_tree, only_colors)
+		for x : String in _col_cache.keys():
+			if _col_cache[x][0] == false:
+				_col_cache.erase(x)
+
+func _map(from : TreeItem, to : TreeItem, only_colors : bool = false) -> void:
+	if from == null:return
+	var meta_data : String = str(from.get_metadata(0))
+	to.set_metadata(0, meta_data)
+	to.set_icon(0, from.get_icon(0))
+	to.set_icon_modulate(0, from.get_icon_modulate(0))
+	#to.set_custom_color(0, from.get_custom_color(0))
+	if from.get_custom_bg_color(0) == Color.BLACK:
+		to.clear_custom_bg_color(0)
+	else:
+		to.set_custom_bg_color(0, from.get_custom_bg_color(0))
+	to.set_text(0, from.get_text(0))
+
+	if !_col_cache.has(meta_data):
+		_col_cache[meta_data] = [true, true]
+	_col_cache[meta_data][0] = true
+	to.collapsed = _col_cache[meta_data][1]
+
+	if only_colors:
+		var from_current : TreeItem = from.get_first_child()
+		var to_current : TreeItem = to.get_first_child()
+		while null != from_current and null != to_current:
+			_map(from_current, to_current, only_colors)
+			from_current = from_current.get_next()
+			to_current = to_current.get_next()
+	else:
+		var from_current : TreeItem = from.get_first_child()
+		while null != from_current:
+			_map(from_current, to.create_child(), only_colors)
+			from_current = from_current.get_next()
+
+
+func _explorer(current_tree : Tree, only_colors: bool) -> void:
+	const MAX_TREE : int = 2000
+	var itry : int = 0
+	var root : TreeItem = current_tree.get_root()
+	var fav : TreeItem = null
+	var res : TreeItem = null
+	var current : TreeItem = root.get_first_child()
+
+	while null != current:
+		var variant : Variant = current.get_metadata(0)
+		if variant is String:
+			if variant == "Favorites":
+				fav = current
+				if res and fav:break
+			elif variant == "res://":
+				res = current
+				if res and fav:break
+		current = current.get_next()
+	if fav and res:
+		_hook_item = fav
+		current = fav.get_first_child()
+
+		while null != current:
+			var variant : Variant = current.get_metadata(0)
+			if variant is String:
+				var res_current : TreeItem = res.get_first_child()
+				while null != res_current:
+					var sub_variant : Variant = res_current.get_metadata(0)
+					if sub_variant is String:
+						if sub_variant == variant:
+							_map(res_current, current, only_colors)
+							break
+						if variant.begins_with(sub_variant):
+							itry += 1
+							if itry > MAX_TREE:
+								push_warning("[PLUGIN] Error, elements overflow!")
+								break
+							res_current = res_current.get_first_child()
+							continue
+					res_current = res_current.get_next()
+			current = current.get_next()
 
 func _moved_callback(a : String, b : String) -> void:
 	if a != b:
@@ -136,64 +189,8 @@ func _remove_callback(a : String) -> void:
 	if _col_cache.has(a):
 		_col_cache.erase(a)
 
-
-## Add recursive folders/files
-func _explorer(path : String, tree : TreeItem, data : Dictionary, base_color : Color = DEFAULT_COLOR) -> void:
-	var efs : EditorFileSystem = EditorInterface.get_resource_filesystem()
-	var fs : EditorFileSystemDirectory = efs.get_filesystem_path(path)
-	if !fs:return
-	if base_color != DEFAULT_COLOR:
-		base_color.a = 0.1
-	for x : int in fs.get_subdir_count():
-		var new_path : String = fs.get_subdir(x).get_path()
-		var new_tree : TreeItem = tree.create_child()
-		var fname : String = new_path.trim_suffix("/").get_file()
-		new_tree.set_text(0, fname)
-		new_tree.set_metadata(0, new_path)
-		new_tree.set_icon(0, _get_icon(new_path))
-		if base_color != DEFAULT_COLOR:
-			new_tree.set_custom_bg_color(0, base_color)
-		else:
-			new_tree.set_custom_bg_color(0, Color.TRANSPARENT)
-		if _col_cache.has(new_path):
-			new_tree.collapsed = _col_cache[new_path][1]
-		else:
-			_col_cache[new_path] = [true, true]
-			new_tree.collapsed = true
-		_col_cache[new_path][0] = true
-		var current_color : Color = base_color
-		if data.has(new_path):
-			current_color = _parse_color(data[new_path])
-			if current_color != DEFAULT_COLOR:
-				var nw : Color = current_color
-				nw.a = 1.0
-				new_tree.set_icon_modulate(0, nw)
-				nw.a = 0.13
-				new_tree.set_custom_bg_color(0, nw)
-			else:
-				new_tree.set_icon_modulate(0, current_color)
-				new_tree.set_custom_bg_color(0, current_color)
-		else:
-			var b : Color = base_color
-			b.a = 1.0
-			new_tree.set_icon_modulate(0, b)
-		current_color.a = 0.1
-		_explorer(new_path, new_tree, data, current_color)
-	for x : int in fs.get_file_count():
-		var current_color : Color = base_color
-		var new_path : String = fs.get_file_path(x)
-		var new_tree : TreeItem = tree.create_child()
-		var fname : String = new_path.trim_suffix("/").get_file()
-		new_tree.set_text(0, fname)
-		new_tree.set_metadata(0, new_path)
-		new_tree.set_icon(0, _get_icon(new_path))
-		if data.has(new_path):
-			current_color = _parse_color(data[new_path])
-		if current_color == DEFAULT_COLOR:
-			new_tree.set_custom_bg_color(0, Color.TRANSPARENT)
-		else:
-			current_color.a = 0.1
-			new_tree.set_custom_bg_color(0, current_color)
+func _save_external_data() -> void:
+	_require_update = true
 
 #region rescue_fav
 func _n(n : Node) -> bool:
@@ -209,28 +206,6 @@ func _n(n : Node) -> bool:
 	for x in n.get_children():
 		if _n(x): return true
 	return false
-
-func _c(i : TreeItem) -> void:
-	if i == null : return
-	var d : String = str(i.get_metadata(0))
-	if FileAccess.file_exists(d) or DirAccess.dir_exists_absolute(d):
-		var data : Dictionary = ProjectSettings.get_setting("file_customization/folder_colors",{})
-		var color : Color = DEFAULT_COLOR
-		if data.has(d):
-			color = _parse_color(data[d])
-		if color != DEFAULT_COLOR:
-			color.a = 0.13
-			i.set_custom_bg_color(0, color)
-		else:
-			i.set_custom_bg_color(0, Color.TRANSPARENT)
-		_explorer(d, i, data, color)
-	if !_col_cache.has(d):
-		_col_cache[d] = [true, true]
-	_col_cache[d][0] = true
-	i.collapsed = _col_cache[d][1]
-	var n : TreeItem = i.get_next()
-	if n != null:
-		_c(n)
 #endregion
 
 
@@ -257,13 +232,16 @@ func _get_icon(path : String) -> Texture:
 	return load_icon
 
 func _physics_process(_delta: float) -> void:
-	_chk += _delta
-	if _chk < 0.35:return
-	_chk = 0.0
-	var n_SHA256 : String = FileAccess.get_sha256(FAV_FOLDER)
-	if _SHA256 != n_SHA256:
-		var fs : EditorFileSystem =  EditorInterface.get_resource_filesystem()
-		if !fs or fs.is_scanning():return
-		for k : Variant in _col_cache.keys():
-			_col_cache[k][0] = false
-		_update(true)
+	if !is_instance_valid(_hook_item):
+		_require_update = true
+		_chk = 0.0
+		_update.call()
+	if _require_update:
+		_chk += _delta
+		if _chk < WAIT_TIME_TO_REPLICATE_COLORS:return
+		if _current_replicate_times > 0:
+			_current_replicate_times -= 1
+		else:
+			_require_update = false
+		_chk = 0.0
+		_update.call_deferred(true)
