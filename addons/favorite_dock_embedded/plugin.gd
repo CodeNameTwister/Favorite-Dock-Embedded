@@ -1,7 +1,6 @@
 @tool
 extends EditorPlugin
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-#	Script Spliter
 #	https://github.com/CodeNameTwister/Favorite-Dock-Embedded
 #
 #	Favorite-Dock-Embedded addon for godot 4
@@ -77,7 +76,7 @@ func _exit_tree() -> void:
 
 func _def_update() -> void:
 	if !is_instance_valid(_hook_item):
-		_update.call_deferred()
+		_update.call()
 	_require_update = true
 
 ## Tree callback
@@ -244,4 +243,4 @@ func _physics_process(_delta: float) -> void:
 		else:
 			_require_update = false
 		_chk = 0.0
-		_update.call_deferred(true)
+		_update.call(true)
